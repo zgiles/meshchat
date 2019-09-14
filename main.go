@@ -8,9 +8,9 @@ import (
 	"strconv"
 
 	"github.com/gorilla/websocket"
-	"github.com/hashicorp/memberlist"
-	"github.com/nats-io/gnatsd/server"
-	"github.com/nats-io/go-nats"
+	// "github.com/hashicorp/memberlist"
+	"github.com/nats-io/nats-server/server"
+	nats "github.com/nats-io/nats.go"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -84,18 +84,20 @@ func main() {
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 
-	// cluster list
-	clusteropts := memberlist.DefaultWANConfig()
-	clusteropts.BindPort = config.clusterport
-	clusteropts.AdvertisePort = config.clusterport
-	list, err := memberlist.Create(clusteropts)
-	if err != nil {
-		log.Println("Failed to start memberlist.. oh well", err.Error())
-	}
-	_, err = list.Join([]string{})
-	if err != nil {
-		log.Println("Failed to join members", err.Error())
-	}
+	/*
+		// cluster list
+		clusteropts := memberlist.DefaultWANConfig()
+		clusteropts.BindPort = config.clusterport
+		clusteropts.AdvertisePort = config.clusterport
+		list, err := memberlist.Create(clusteropts)
+		if err != nil {
+			log.Println("Failed to start memberlist.. oh well", err.Error())
+		}
+		_, err = list.Join([]string{})
+		if err != nil {
+			log.Println("Failed to join members", err.Error())
+		}
+	*/
 
 	// start Nats
 	opts := server.Options{
@@ -122,9 +124,9 @@ func main() {
 	cs.ns = RunServer(opts)
 
 	// connect to nats
-	nc, err := nats.Connect(nats.DefaultURL)
+	nc, err := nats.Connect("nats://localhost:" + strconv.Itoa(config.natsport))
 	if err != nil {
-		log.Println("Couldn't connect to NATs, oh well")
+		log.Println("Couldn't connect to NATs, oh well, will keep trying")
 	}
 	nc.Subscribe("meshchat.broadcast", cs.handleNatsMsg)
 	cs.nc = nc

@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/nats-io/gnatsd/server"
-	"github.com/nats-io/go-nats"
+	"github.com/nats-io/nats-server/server"
+	"github.com/nats-io/nats.go"
 )
 
 type ChatServer struct {
