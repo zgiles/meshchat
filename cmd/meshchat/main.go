@@ -11,6 +11,7 @@ import (
 	// "github.com/hashicorp/memberlist"
 	"github.com/nats-io/nats-server/server"
 	nats "github.com/nats-io/nats.go"
+	"github.com/zgiles/meshchat/chatserver"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -77,10 +78,14 @@ func main() {
 	}
 
 	// chat server internal
-	cs := &ChatServer{}
-	cs.clients = make(map[*websocket.Conn]bool)
-	cs.broadcast = make(chan Message)
-	cs.upgrader = websocket.Upgrader{
+	cs := &chatserver.ChatServer{
+		WriteWait:  config.writeWait,
+		PongWait:   config.pongWait,
+		PingPeriod: config.pingPeriod,
+	}
+	cs.Clients = make(map[*websocket.Conn]bool)
+	cs.Broadcast = make(chan chatserver.Message)
+	cs.Upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 
@@ -121,16 +126,16 @@ func main() {
 		}
 		opts.Routes = routes
 	}
-	cs.ns = RunServer(opts)
+	cs.Ns = RunServer(opts)
 
 	// connect to nats
 	nc, err := nats.Connect("nats://localhost:" + strconv.Itoa(config.natsport))
 	if err != nil {
 		log.Println("Couldn't connect to NATs, oh well, will keep trying")
 	}
-	nc.Subscribe("meshchat.broadcast", cs.handleNatsMsg)
-	cs.nc = nc
-	cs.natsconnected = true
+	nc.Subscribe("meshchat.broadcast", cs.HandleNatsMsg)
+	cs.Nc = nc
+	cs.Natsconnected = true
 
 	// publisher
 	// go cs.messagepump()
@@ -139,7 +144,7 @@ func main() {
 	// fs := http.FileServer(http.Dir("public/"))
 	fs := http.FileServer(assetFS())
 	http.Handle("/", fs)
-	http.HandleFunc("/ws", cs.handleChat)
+	http.HandleFunc("/ws", cs.HandleChat)
 	log.Printf("Starting http on %d", config.httpport)
 	err = http.ListenAndServe(":"+strconv.Itoa(config.httpport), nil)
 	if err != nil {

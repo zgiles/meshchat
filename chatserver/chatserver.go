@@ -1,4 +1,4 @@
-package main
+package chatserver
 
 import (
 	"encoding/json"
@@ -13,13 +13,16 @@ import (
 )
 
 type ChatServer struct {
-	clients       map[*websocket.Conn]bool
-	broadcast     chan Message
-	upgrader      websocket.Upgrader
-	natsconnected bool
-	nc            *nats.Conn
-	ns            *server.Server
-	writemu       sync.Mutex
+	WriteWait     int
+	PongWait      int
+	PingPeriod    int
+	Clients       map[*websocket.Conn]bool
+	Broadcast     chan Message
+	Upgrader      websocket.Upgrader
+	Natsconnected bool
+	Nc            *nats.Conn
+	Ns            *server.Server
+	Writemu       sync.Mutex
 }
 
 type Message struct {
@@ -30,26 +33,26 @@ type Message struct {
 	Id       string `json:"id"`
 }
 
-func (cs *ChatServer) handleChat(w http.ResponseWriter, r *http.Request) {
+func (cs *ChatServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 	log.Println("New Connection")
-	ws, err := cs.upgrader.Upgrade(w, r, nil)
+	ws, err := cs.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer ws.Close()
-	cs.clients[ws] = true
+	cs.Clients[ws] = true
 
 	remoteid := ws.RemoteAddr().String()
 	remotename := "User" + remoteid
 
-	ticker := time.NewTicker(time.Duration(config.pingPeriod) * time.Second)
+	ticker := time.NewTicker(time.Duration(cs.PingPeriod) * time.Second)
 	defer ticker.Stop()
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
 				// log.Println("Sending a ping to %s\n", remoteid)
-				ws.SetWriteDeadline(time.Now().Add(time.Duration(config.writeWait) * time.Second))
+				ws.SetWriteDeadline(time.Now().Add(time.Duration(cs.WriteWait) * time.Second))
 				if err := ws.WriteMessage(websocket.PingMessage, nil); err != nil {
 					log.Println(err)
 					return
@@ -69,7 +72,7 @@ func (cs *ChatServer) handleChat(w http.ResponseWriter, r *http.Request) {
 			log.Println(berr)
 		} else {
 			// log.Printf("Sending NATs Pong: %s\n", msg.Name)
-			cs.nc.Publish("meshchat.broadcast", b)
+			cs.Nc.Publish("meshchat.broadcast", b)
 		}
 
 		return nil
@@ -83,20 +86,20 @@ func (cs *ChatServer) handleChat(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Println("Error on ws: ", err)
 			log.Println(msg)
-			delete(cs.clients, ws)
+			delete(cs.Clients, ws)
 			break
 		}
 		//      if msg.Presence {
 		remoteid = msg.Id
 		remotename = msg.Name
 		//      }
-		if cs.natsconnected {
+		if cs.Natsconnected {
 			b, berr := json.Marshal(msg)
 			if berr != nil {
 				log.Println(berr)
 			} else {
 				log.Printf("Sending NATs Message: %s\n", msg.Message)
-				cs.nc.Publish("meshchat.broadcast", b)
+				cs.Nc.Publish("meshchat.broadcast", b)
 			}
 		}
 
@@ -104,29 +107,29 @@ func (cs *ChatServer) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (cs *ChatServer) sendtolocal(msg Message) {
-	cs.writemu.Lock()
-	defer cs.writemu.Unlock()
-	for client := range cs.clients {
-		client.SetWriteDeadline(time.Now().Add(time.Duration(config.writeWait) * time.Second))
+func (cs *ChatServer) Sendtolocal(msg Message) {
+	cs.Writemu.Lock()
+	defer cs.Writemu.Unlock()
+	for client := range cs.Clients {
+		client.SetWriteDeadline(time.Now().Add(time.Duration(cs.WriteWait) * time.Second))
 		err := client.WriteJSON(msg)
 		if err != nil {
 			log.Println("Error writing to client: ", err)
 			client.Close()
-			delete(cs.clients, client)
+			delete(cs.Clients, client)
 		}
 
 	}
 
 }
 
-func (cs *ChatServer) handleNatsMsg(m *nats.Msg) {
+func (cs *ChatServer) HandleNatsMsg(m *nats.Msg) {
 	var msg Message
 	err := json.Unmarshal(m.Data, &msg)
 	if err != nil {
 		log.Println(err)
 	} else {
 		// log.Printf("New NATs Message: %s - %s", msg.Name, msg.Message)
-		cs.sendtolocal(msg)
+		cs.Sendtolocal(msg)
 	}
 }
