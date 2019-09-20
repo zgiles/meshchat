@@ -271,7 +271,7 @@ func main() {
 	})
 
 	w.SetContent(widget.NewVBox(
-		widget.NewLabel("Meshchat..."),
+		widget.NewLabel("Meshchat...                     Source: github.com/zgiles/meshchat"),
 		widget.NewVBox(form),
 		buttonrow,
 		openbrowserbutton,
