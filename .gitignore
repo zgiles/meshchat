@@ -2,4 +2,5 @@ bindata.go
 meshchat-amd64
 meshchat-arm5
 meshchat-darwin
+/meshchatui
 /public/
