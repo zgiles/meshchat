@@ -8,7 +8,9 @@ import (
 	"fyne.io/fyne/widget"
 
 	"context"
+	"errors"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,6 +20,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/nats-io/nats-server/server"
 	nats "github.com/nats-io/nats.go"
+	"github.com/pkg/browser"
 	"github.com/zgiles/meshchat/chatserver"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -118,7 +121,7 @@ func (config *rootConfig) startmeshchat() chan interface{} {
 	go func() {
 		err = server.ListenAndServe()
 		if err != nil {
-			log.Println("ListenAndServe: ", err)
+			log.Fatal("ListenAndServe: ", err)
 		}
 		for c := range cs.Clients {
 			c.Close()
@@ -137,6 +140,43 @@ func (config *rootConfig) startmeshchat() chan interface{} {
 		cancel()
 	}()
 	return cancelchan
+}
+
+func externalIP() (string, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return "", err
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue // interface down
+		}
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue // loopback interface
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return "", err
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			ip = ip.To4()
+			if ip == nil {
+				continue // not an ipv4 address
+			}
+			return ip.String(), nil
+		}
+	}
+	return "", errors.New("are you connected to the network?")
 }
 
 func main() {
@@ -166,7 +206,12 @@ func main() {
 	// GUI
 	guiapp := fyneapp.New()
 	w := guiapp.NewWindow("Meshchat")
-	w.Resize(fyne.Size{500, 300})
+	w.Resize(fyne.Size{600, 300})
+
+	ip, _ := externalIP()
+	ipaddress := widget.NewLabel(ip)
+
+	runninglabel := widget.NewLabel("Not Running")
 
 	peer1 := widget.NewEntry()
 	peer1.SetPlaceHolder("Peer 1 (optional)")
@@ -178,8 +223,8 @@ func main() {
 	form.Append("Peer 1", peer1)
 	form.Append("Peer 2", peer2)
 	form.Append("Peer 3", peer3)
-
-	runninglabel := widget.NewLabel("Not Running")
+	form.Append("This Computers IP:", ipaddress)
+	form.Append("Running:", runninglabel)
 
 	startbutton := widget.NewButton("Start Meshchat", func() {
 		peer1.ReadOnly = true
@@ -221,11 +266,15 @@ func main() {
 		quitbutton,
 	)
 
+	openbrowserbutton := widget.NewButton("Open: http://"+ip+":"+strconv.Itoa(config.httpport), func() {
+		browser.OpenURL("http://" + ip + ":" + strconv.Itoa(config.httpport))
+	})
+
 	w.SetContent(widget.NewVBox(
 		widget.NewLabel("Meshchat..."),
 		widget.NewVBox(form),
 		buttonrow,
-		runninglabel,
+		openbrowserbutton,
 	))
 
 	w.ShowAndRun()
