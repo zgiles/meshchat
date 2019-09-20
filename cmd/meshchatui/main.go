@@ -92,7 +92,7 @@ func (config *rootConfig) startmeshchat() chan interface{} {
 	if len(config.peers) > 0 {
 		var routes []*url.URL
 		for _, i := range config.peers {
-			u, _ := url.Parse("nats-route://" + i)
+			u, _ := url.Parse("nats-route://" + i + ":4001")
 			routes = append(routes, u)
 		}
 		opts.Routes = routes
